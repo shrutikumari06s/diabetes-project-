@@ -29,6 +29,84 @@ PIPELINE_PATH = os.path.join("models", "best_pipeline.joblib")
 METRICS_PATH  = os.path.join("models", "model_metrics.json")
 
 # ─────────────────────────────────────────────
+# AUTO-TRAIN: if model files are missing, train now
+# (required for Streamlit Cloud where .joblib is not in git)
+# ─────────────────────────────────────────────
+def auto_train():
+    """Run the training pipeline silently if model files do not exist."""
+    if os.path.exists(PIPELINE_PATH) and os.path.exists(METRICS_PATH):
+        return  # already trained
+
+    if not os.path.exists(DATASET_PATH):
+        return  # dataset missing — can't train
+
+    from sklearn.model_selection import train_test_split
+    from sklearn.pipeline import Pipeline
+    from sklearn.compose import ColumnTransformer
+    from sklearn.preprocessing import StandardScaler, OneHotEncoder
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import (
+        accuracy_score, precision_score, recall_score,
+        f1_score, roc_auc_score, confusion_matrix,
+    )
+
+    df = pd.read_csv(DATASET_PATH).drop_duplicates()
+    X = df.drop(columns=["diabetes"])
+    y = df["diabetes"]
+
+    numerical_features   = ["age", "bmi", "HbA1c_level", "blood_glucose_level"]
+    binary_features      = ["hypertension", "heart_disease"]
+    categorical_features = ["gender", "smoking_history"]
+
+    preprocessor = ColumnTransformer([
+        ("num", StandardScaler(),                                        numerical_features),
+        ("bin", "passthrough",                                           binary_features),
+        ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), categorical_features),
+    ], remainder="drop")
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.20, random_state=42, stratify=y
+    )
+
+    models = {
+        "Logistic Regression": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42),
+        "Random Forest":       RandomForestClassifier(n_estimators=100, class_weight="balanced", random_state=42, n_jobs=-1),
+    }
+
+    results = {}
+    for name, model in models.items():
+        pipe = Pipeline([("preprocessor", preprocessor), ("classifier", model)])
+        pipe.fit(X_train, y_train)
+        y_pred = pipe.predict(X_test)
+        y_prob = pipe.predict_proba(X_test)[:, 1]
+        results[name] = {
+            "accuracy":         round(float(accuracy_score(y_test, y_pred)),  4),
+            "precision":        round(float(precision_score(y_test, y_pred, zero_division=0)), 4),
+            "recall":           round(float(recall_score(y_test, y_pred, zero_division=0)),    4),
+            "f1_score":         round(float(f1_score(y_test, y_pred, zero_division=0)),        4),
+            "roc_auc":          round(float(roc_auc_score(y_test, y_prob)),    4),
+            "confusion_matrix": confusion_matrix(y_test, y_pred).tolist(),
+            "pipeline":         pipe,
+        }
+
+    best_name = max(results, key=lambda n: results[n]["f1_score"])
+    os.makedirs("models", exist_ok=True)
+    joblib.dump(results[best_name]["pipeline"], PIPELINE_PATH)
+
+    metrics_out = {
+        "best_model": best_name,
+        "selection_criterion": "F1-score (positive class)",
+        "models": {n: {k: v for k, v in r.items() if k != "pipeline"} for n, r in results.items()},
+    }
+    with open(METRICS_PATH, "w") as f:
+        json.dump(metrics_out, f, indent=2)
+
+# Run auto-train before anything else loads
+with st.spinner("Setting up models for first run — please wait (1-2 minutes)..."):
+    auto_train()
+
+# ─────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────
 st.set_page_config(
