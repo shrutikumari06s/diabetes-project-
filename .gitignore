@@ -1,0 +1,23 @@
+﻿# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Environment secrets
+.env
+
+# Trained model binary (large - regenerate with train_model.py)
+models/best_pipeline.joblib
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
