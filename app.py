@@ -102,12 +102,8 @@ def auto_train():
     with open(METRICS_PATH, "w") as f:
         json.dump(metrics_out, f, indent=2)
 
-# Run auto-train before anything else loads
-with st.spinner("Setting up models for first run — please wait (1-2 minutes)..."):
-    auto_train()
-
 # ─────────────────────────────────────────────
-# PAGE CONFIG
+# PAGE CONFIG  — must be the FIRST Streamlit call
 # ─────────────────────────────────────────────
 st.set_page_config(
     page_title="Diabetes Risk Prediction Dashboard",
@@ -115,6 +111,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Run auto-train after set_page_config
+with st.spinner("Setting up models for first run — please wait (1-2 minutes)..."):
+    auto_train()
 
 # ─────────────────────────────────────────────
 # CUSTOM CSS
@@ -402,7 +402,7 @@ elif "📊 Dataset Overview" in section:
         missing = df.isnull().sum().reset_index()
         missing.columns = ["Column", "Missing Count"]
         missing["Missing %"] = (missing["Missing Count"] / len(df) * 100).round(2)
-        st.dataframe(missing, use_container_width=True, hide_index=True)
+        st.dataframe(missing, hide_index=True)
         if missing["Missing Count"].sum() == 0:
             st.success("✔ No missing values found in the dataset.")
 
@@ -464,7 +464,7 @@ elif "🤖 Model Performance" in section:
         rows.append(row)
 
     comparison_df = pd.DataFrame(rows)
-    st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+    st.dataframe(comparison_df, hide_index=True)
 
     st.markdown("**Metric Explanations:**")
     st.markdown("""
@@ -635,7 +635,7 @@ elif "🔬 Predict Risk" in section:
                 help="Fasting blood glucose. Normal < 100 mg/dL."
             )
 
-        submitted = st.form_submit_button("🔍 Predict Class", use_container_width=True)
+        submitted = st.form_submit_button("Predict Class", use_container_width=True)
 
     if submitted:
         # ── Input validation ──
